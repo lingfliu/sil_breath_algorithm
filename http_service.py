@@ -25,7 +25,11 @@ def req_breath_detect():
 
     br = detectorList[id].detect(data)
 
-    return jsonify({'id':id, 'br_list':br})
+    return make_response(jsonify({'id':id, 'br_list':br}), 200)
+
+@app.route("/api/algorithm/test", methods=['GET'])
+def req_test():
+    return make_response(jsonify({'id':'123456', 'msg':'hello'}), 200)
 
 
 def gtask_start_flask():
