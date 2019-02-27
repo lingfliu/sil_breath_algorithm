@@ -3,6 +3,7 @@ from flask_cors import CORS
 import json
 import time
 import gevent
+import codecs
 
 from breath_detect import BreathDetector
 
@@ -16,7 +17,8 @@ detectorList = {}
 
 @app.route("/api/algorithm/breath_detect", methods=['POST'])
 def req_breath_detect():
-    json_obj = request.get_json()
+    json_str = request.form.get('d')
+    json_obj = json.loads(json_str)
     data = json_obj['data']
     id = json_obj['id']
 
@@ -25,7 +27,9 @@ def req_breath_detect():
 
     br = detectorList[id].detect(data)
 
-    return make_response(jsonify({'id':id, 'br_list':br}), 200)
+    br_array = br.tolist()
+
+    return make_response(jsonify({'id':id, 'br_list':br_array}), 200)
 
 @app.route("/api/algorithm/test", methods=['GET'])
 def req_test():
