@@ -6,7 +6,7 @@ FFT_LEN = 512
 FFT_LEN_2 = 256
 SPS = 5
 BUFF_LEN = 300*4
-MU_SPEC_LEN_2 = 25
+MU_SPEC_LEN_2 = 24
 class BreathDetector:
 
     def __init__(self):
@@ -18,28 +18,55 @@ class BreathDetector:
 
     def update(self, data):
         # update buff 更新数据缓冲，如果数据断开的话，需要重置，这里未设置
-        if self.buff_len < BUFF_LEN:
+        if self.buff_len == BUFF_LEN:
+            self.buff[:-len(data)] = self.buff[len(data):]
+            self.buff[self.buff_len-len(data):] = data
+
+            # update spec
+            self.spec[:-len(data)] = self.spec[len(data):]
+
+            # compute fft of incoming points 逐点计算新数据的频谱
+            for m in range(len(data)+FFT_LEN_2-2):
+                fft_data = np.zeros(FFT_LEN)
+                idx = self.buff_len-FFT_LEN_2 - len(data)+m
+                if (idx > self.buff_len-FFT_LEN_2):
+                    fft_data[:FFT_LEN_2+self.buff_len-idx] = self.buff[idx-FFT_LEN_2:]
+                else:
+                    fft_data = self.buff[idx-FFT_LEN_2:idx+FFT_LEN_2]
+
+                # print(idx, '1200', m)
+                self.spec[idx] = np.abs(np.fft.fft(fft_data))
+        else:
+            self.buff[self.buff_len:self.buff_len+len(data)] = data
+
+
+            buff_len = self.buff_len + len(data)
+
+            # compute fft of incoming points 逐点计算新数据的频谱
+            for m in range(len(data)):
+                fft_data = np.zeros(FFT_LEN)
+                idx = buff_len-len(data)+m
+                if idx < FFT_LEN_2:
+                    if buff_len < FFT_LEN_2:
+                        fft_data[FFT_LEN_2-idx:FFT_LEN_2-idx+buff_len] = self.buff[:buff_len]
+                    else:
+                        fft_data[FFT_LEN_2-idx:] = self.buff[:idx+FFT_LEN_2]
+
+
+                elif idx > buff_len - FFT_LEN_2:
+                    if buff_len < FFT_LEN_2:
+                        fft_data[:buff_len] = self.buff[:buff_len]
+                    else:
+                        fft_data[:buff_len-idx+FFT_LEN_2] = self.buff[idx-FFT_LEN_2:buff_len]
+
+                else:
+                    fft_data = self.buff[idx-FFT_LEN_2:idx+FFT_LEN_2]
+
+                self.spec[idx] = np.abs(np.fft.fft(fft_data))
+
+            # update buff_len
             self.buff_len += len(data)
 
-        self.buff[len(data):] = self.buff[:-len(data)]
-        self.buff[:len(data)] = data
-
-        # update fft 更新频谱缓冲
-        if self.buff_len < FFT_LEN:
-            return
-        self.spec[len(data):] = self.spec[:-len(data)]
-
-        # compute fft of incoming points 逐点计算新数据的频谱
-        for m in range(len(data)+FFT_LEN_2):
-            fft_data = np.zeros(FFT_LEN)
-            if m < FFT_LEN_2:
-                fft_data[FFT_LEN_2-m:FFT_LEN_2] = self.buff[:m]
-                fft_data[FFT_LEN_2:] = self.buff[m:m+FFT_LEN_2]
-            else:
-                fft_data = self.buff[m-FFT_LEN_2:m+FFT_LEN_2]
-            spec = np.abs(np.fft.fft(fft_data))
-
-            self.spec[m] = spec
 
         # update mu in a complete way 整个序列全部做一次频谱的平均
         for m in range(BUFF_LEN):
@@ -47,11 +74,12 @@ class BreathDetector:
                 break
 
             if m < MU_SPEC_LEN_2:
-                self.mu_spec[m] = np.mean(self.spec[:m+MU_SPEC_LEN_2])
+                self.mu_spec[m] = np.mean(self.spec[:m+MU_SPEC_LEN_2], axis=0)
             elif m > BUFF_LEN - MU_SPEC_LEN_2:
-                self.mu_spec[m] = np.mean(self.spec[m-MU_SPEC_LEN_2:])
+                self.mu_spec[m] = np.mean(self.spec[m-MU_SPEC_LEN_2:], axis=0)
             else:
-                self.mu_spec[m] = np.mean(self.spec[m-MU_SPEC_LEN_2:m+MU_SPEC_LEN_2])
+                self.mu_spec[m] = np.mean(self.spec[m-MU_SPEC_LEN_2:m+MU_SPEC_LEN_2], axis=0)
+
 
     def detect(self, data):
         self.update(data)
@@ -97,7 +125,7 @@ class BreathDetector:
 
         # find the breath peak 呼吸主频的尖峰应当在5-50之内，并且能量值要大于4000，如果测试结果不理想，可以动态调整这两个数值
         for m in range(len(peak)):
-            if peakIdx[m] < 50 and peakIdx[m] > 5 and peak[m] > 4000:
+            if peakIdx[m] < 50 and peakIdx[m] > 5 and peak[m] > 20000:
                 brPeak = peak[m]
                 brPeakIdx = peakIdx[m]
                 break
@@ -106,7 +134,7 @@ class BreathDetector:
             br = -1
         else:
             diffIdx = np.zeros(len(peak))
-            for m in range(peakIdx):
+            for m in range(len(peakIdx)):
                 diffIdx[m] = peakIdx[m] - brPeakIdx*2
                 if diffIdx[m] > 0:
                     # found the side peak 找到主频的谐波旁瓣
