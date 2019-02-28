@@ -145,7 +145,7 @@ class BreathDetector:
             if sidePeakIdx < 0:
                 br = -1
             else:
-                if brPeak / sidePeak > 1.3: # 如果比值大于1.3，则认为该呼吸成分周期特征明显
+                if brPeak / sidePeak > 1.5: # 如果比值大于1.3，则认为该呼吸成分周期特征明显
                     br = brPeakIdx
                 else:
                     br = -1
